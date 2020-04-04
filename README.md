@@ -1,2 +1,3 @@
-# the-timeline-api
-A CRUD API Built with Go and a Sprinkle of Blood. And Sweat. Yea. Tears too
+# timelineapi
+
+An api that exposes CRUD functionality - built with Go and a sprinkle of blood and a sprinkle of sweat and a sprinkle of tears.
