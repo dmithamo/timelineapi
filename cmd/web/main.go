@@ -17,7 +17,7 @@ func main() {
 
 	// /auth
 	r.HandleFunc("/auth/register", registerUser).Methods(http.MethodPost)
-	r.HandleFunc("/auth/register/{userID}", updateUser).Methods(http.MethodPatch)
+	r.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", updateUser).Methods(http.MethodPatch)
 	r.HandleFunc("/auth/login", loginUser).Methods(http.MethodPost)
 
 	// /projects
