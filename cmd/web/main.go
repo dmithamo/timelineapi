@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dmithamo/timelineapi/pkg/middleware"
 	"github.com/gorilla/mux"
 )
 
 func main() {
-	// initialize router, add routes
+	// initialize router, register middleware, add routes
 	r := mux.NewRouter()
+	r.Use(middleware.EnforceContentType)
 
 	// /auth
 	r.HandleFunc("/auth/register", registerUser).Methods(http.MethodPost)
