@@ -1,6 +1,8 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // register handles requests for creating new users
 // Accessible @ POST /auth/register

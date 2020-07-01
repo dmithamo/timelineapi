@@ -17,8 +17,8 @@ func CheckAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		authHeaderSlice := strings.Split(authHeader, "Bearer ")
-		if len(authHeaderSlice) < 2 {
+		authHeaderSlice := strings.SplitN(authHeader, "Bearer ", 2)
+		if len(authHeaderSlice) != 2 {
 			utils.SendJSONResponse(w, http.StatusUnauthorized, "Malformed authorization header", nil)
 			return
 		}
