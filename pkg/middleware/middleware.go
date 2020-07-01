@@ -16,18 +16,13 @@ func EnforceContentType(next http.Handler) http.Handler {
 		if (r.Method == http.MethodPost || r.Method == http.MethodPatch) &&
 			r.Header.Get("Content-Type") != allowedContentType {
 
-			type errMsg struct {
-				Message string
-			}
-			msg := errMsg{"Bad request. Format request body as JSON"}
-			response, err := json.Marshal(&msg)
-
+			response, err := formatResponseHelper("Bad request. Request body should be valid JSON")
 			if err != nil {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
 
-			w.WriteHeader(http.StatusBadRequest)
-			_, err = w.Write([]byte(response))
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, err = w.Write(response)
 
 			if err != nil {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -36,4 +31,40 @@ func EnforceContentType(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// SetCorsPolicy set the cross origin request policy
+func SetCorsPolicy(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
+
+		if r.Method == "OPTIONS" {
+			response, err := formatResponseHelper("Method not implemented")
+			if err != nil {
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+
+			w.WriteHeader(http.StatusNotImplemented)
+			_, err = w.Write(response)
+
+			if err != nil {
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// formatResponseHelper structures a response message as JSON
+func formatResponseHelper(message string) ([]byte, error) {
+	type errMessage struct {
+		Message string
+	}
+	msg := errMessage{message}
+	resp, err := json.Marshal(&msg)
+
+	return resp, err
 }
