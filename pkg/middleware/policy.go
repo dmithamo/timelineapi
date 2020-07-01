@@ -2,8 +2,9 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/dmithamo/timelineapi/pkg/utils"
 )
 
 // EnforceContentType checks that the request body is JSON-formatted,
@@ -15,18 +16,8 @@ func EnforceContentType(next http.Handler) http.Handler {
 
 		if (r.Method == http.MethodPost || r.Method == http.MethodPatch) &&
 			r.Header.Get("Content-Type") != allowedContentType {
-
-			response, err := formatResponseHelper("Bad request. Request body should be valid JSON")
-			if err != nil {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-			}
-
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, err = w.Write(response)
-
-			if err != nil {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-			}
+			utils.SendJSONResponse(w, http.StatusUnprocessableEntity, "Bad request. Request body should be valid JSON", nil)
+			return
 		}
 
 		next.ServeHTTP(w, r)
@@ -41,30 +32,10 @@ func SetCorsPolicy(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
 
 		if r.Method == "OPTIONS" {
-			response, err := formatResponseHelper("Method not implemented")
-			if err != nil {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-			}
-
-			w.WriteHeader(http.StatusNotImplemented)
-			_, err = w.Write(response)
-
-			if err != nil {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-			}
+			utils.SendJSONResponse(w, http.StatusNotImplemented, "Not supported", nil)
+			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-// formatResponseHelper structures a response message as JSON
-func formatResponseHelper(message string) ([]byte, error) {
-	type errMessage struct {
-		Message string
-	}
-	msg := errMessage{message}
-	resp, err := json.Marshal(&msg)
-
-	return resp, err
 }

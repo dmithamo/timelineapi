@@ -60,21 +60,27 @@ func main() {
 func registerRoutes(r *mux.Router) {
 	// /auth
 	r.HandleFunc("/auth/register", registerUser).Methods(http.MethodPost)
-	r.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", updateUser).Methods(http.MethodPatch)
 	r.HandleFunc("/auth/login", loginUser).Methods(http.MethodPost)
 
+	// secure routes
+	s := r.PathPrefix("").Subrouter()
+	s.Use(middleware.CheckAuth)
+
+	// auth - update user
+	s.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", updateUser).Methods(http.MethodPatch)
+
 	// /projects
-	r.HandleFunc("/projects", createProject).Methods(http.MethodPost)
-	r.HandleFunc("/projects", getProjects).Methods(http.MethodGet)
-	r.HandleFunc("/projects/{projectID}", getProject).Methods(http.MethodGet)
-	r.HandleFunc("/projects/{projectID}", updateProject).Methods(http.MethodPatch)
-	r.HandleFunc("/projects/{projectID}", deleteProject).Methods(http.MethodDelete)
+	s.HandleFunc("/projects", createProject).Methods(http.MethodPost)
+	s.HandleFunc("/projects", getProjects).Methods(http.MethodGet)
+	s.HandleFunc("/projects/{projectID}", getProject).Methods(http.MethodGet)
+	s.HandleFunc("/projects/{projectID}", updateProject).Methods(http.MethodPatch)
+	s.HandleFunc("/projects/{projectID}", deleteProject).Methods(http.MethodDelete)
 
 	// /tasks
-	r.HandleFunc("/projects", createTask).Methods(http.MethodPost)
-	r.HandleFunc("/tasks", getTasks).Methods(http.MethodGet)
-	r.HandleFunc("/tasks/{taskID}", getTask).Methods(http.MethodGet)
-	r.HandleFunc("/tasks/{projectID}", getTasksByProject).Methods(http.MethodGet)
-	r.HandleFunc("/tasks/{taskID}", updateTask).Methods(http.MethodPatch)
-	r.HandleFunc("/tasks/{taskID}", deleteTask).Methods(http.MethodDelete)
+	s.HandleFunc("/projects", createTask).Methods(http.MethodPost)
+	s.HandleFunc("/tasks", getTasks).Methods(http.MethodGet)
+	s.HandleFunc("/tasks/{taskID}", getTask).Methods(http.MethodGet)
+	s.HandleFunc("/tasks/{projectID}", getTasksByProject).Methods(http.MethodGet)
+	s.HandleFunc("/tasks/{taskID}", updateTask).Methods(http.MethodPatch)
+	s.HandleFunc("/tasks/{taskID}", deleteTask).Methods(http.MethodDelete)
 }
