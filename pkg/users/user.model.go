@@ -4,7 +4,10 @@ package users
 import (
 	"database/sql"
 	"encoding/json"
+	"regexp"
 	"time"
+
+	"github.com/dmithamo/timelineapi/pkg/dbservice"
 )
 
 // Credentials defines the params requisite for user creation
@@ -15,10 +18,10 @@ type Credentials struct {
 
 // Model defines a user fully
 type Model struct {
-	UserID string `json:"userID"`
+	UserID string `json:"userID,omitempty"`
 	Credentials
-	CreatedAt time.Time `json:"created"`
-	UpdatedAt time.Time `json:"updated"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 // ValidationErrs collects errs from validating user credentials
@@ -30,7 +33,7 @@ type ValidationErrs struct {
 // Error is defined here inorder to qualify ValidationErrs as being a valid `error` type
 func (v ValidationErrs) Error() string {
 	var errs ValidationErrs
-	validationErrs, err := formatErrs(errs)
+	validationErrs, err := FormatErrs(errs)
 	if err != nil {
 		return err.Error()
 	}
@@ -38,8 +41,8 @@ func (v ValidationErrs) Error() string {
 	return string(validationErrs)
 }
 
-// formatErrs structures validation errs as a jsonified string
-func formatErrs(errs ValidationErrs) ([]byte, error) {
+// FormatErrs structures validation errs as a jsonified string
+func FormatErrs(errs ValidationErrs) ([]byte, error) {
 	validationErrs, marshallingErr := json.MarshalIndent(&errs, "", "   ")
 	if marshallingErr != nil {
 		return nil, marshallingErr
@@ -49,31 +52,65 @@ func formatErrs(errs ValidationErrs) ([]byte, error) {
 }
 
 // Validate checks that user credentials are valid
-func (c *Credentials) Validate() *ValidationErrs {
+func (c *Credentials) Validate() error {
+	validEmailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+	invalidPasswordRegex := regexp.MustCompile("^(.{0,7}|[^0-9]*|[^A-Z]*|[^a-z]*|[a-zA-Z0-9]*)$")
 
-	/*
-	* {0,7} - is too short
-	* [^0-9]* - does not contain at least one digit
-	* [^A-Z]* - does not contain at least one uppercase letter
-	* [^a-z]* - does not contain at least one lowercase letter
-	* [a-zA-Z0-9]* - contains ONLY non-special chars
-	 */
+	isInvalidPassword := invalidPasswordRegex.MatchString(c.Password)
+	isvalidUsername := validEmailRegex.MatchString(c.Username)
 
-	// invalidPasswordRegex := "^(.{0,7}|[^0-9]*|[^A-Z]*|[^a-z]*|[a-zA-Z0-9]*)$"
-	return nil
+	hasErrors := false
+	validationErrs := &ValidationErrs{}
+	if isInvalidPassword {
+		validationErrs.Password = "password should be at least 8 characters long, combining uppercase letters, lowercase letters, digits, and special characters"
+		hasErrors = true
+	}
+
+	if !isvalidUsername {
+		validationErrs.Username = "username should be a valid email address"
+		hasErrors = true
+	}
+
+	if !hasErrors {
+		return nil
+	}
+
+	return validationErrs
 }
 
 // CreateUser registers a new user in the db
-func (m *Model) CreateUser(conn *sql.DB) error {
-	return ValidationErrs{}
+func (m *Model) CreateUser(db *sql.DB, credentials *Credentials) error {
+	stmt, err := db.Prepare("INSERT INTO users(userID,username,password) VALUES (UUID_TO_BIN(UUID()),?,?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	// TODO: hash password before insert
+	_, err = stmt.Exec(credentials.Username, credentials.Password)
+
+	return dbservice.CheckDatabaseErr(err, "username")
 }
 
-// GetByID retrieves a user from the db by id
-func (m *Model) GetByID(conn *sql.DB, id string) (*Model, error) {
-	return nil, nil
+// GetByCredentials retrieves a user from the db by username, password - for login
+func (m *Model) GetByCredentials(db *sql.DB, credentials *Credentials) (*Model, error) {
+	var user Model
+	stmt, err := db.Prepare("SELECT BIN_TO_UUID(userID) userID FROM users WHERE username=? AND password=?")
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	// TODO: hash password before select
+	err = stmt.QueryRow(credentials.Username, credentials.Password).Scan(&user.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
 }
 
 // Update updates a property of a user in the db
-func (u *Model) Update(conn *sql.DB, id string) error {
+func (u *Model) Update(db *sql.DB, id string) error {
 	return nil
 }

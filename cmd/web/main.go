@@ -2,22 +2,29 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"log"
 	"net/http"
 	"time"
 
-	db "github.com/dmithamo/timelineapi/pkg/dbservice"
+	"github.com/dmithamo/timelineapi/pkg/dbservice"
 	"github.com/dmithamo/timelineapi/pkg/middleware"
 	"github.com/gorilla/mux"
 )
 
+// application collects all the <injectable> dependencies of the app
+type application struct {
+	db *sql.DB
+}
+
 func main() {
-	// initialize router, register middleware, add routes
+	// initialize app, router, register middleware, add routes
+	app := &application{}
 	r := mux.NewRouter()
 	r.Use(middleware.SetCorsPolicy)
 	r.Use(middleware.EnforceContentType)
-	registerRoutes(r)
+	registerRoutes(r, app)
 
 	// parse flags, connect db, create tables start server
 	dsn := flag.String("dsn", "", "data source name for the db")
@@ -25,19 +32,22 @@ func main() {
 	rdb := flag.Bool("rdb", false, "set to true to drop all db tables and recreate them")
 	flag.Parse()
 
-	conn, err := db.ConnectDB(dsn)
+	db, err := dbservice.ConnectDB(dsn)
 	if err != nil {
 		log.Fatal("connectdb [start]: ", err)
 	}
+	defer db.Close()
+	// inject db (and other dependencies) into app
+	app.db = db
 
 	if *rdb {
-		err := db.DropTables(conn)
+		err := dbservice.DropTables(db)
 		if err != nil {
 			log.Fatal("drop tables [start]: ", err)
 		}
 	}
 
-	err = db.CreateTables(conn)
+	err = dbservice.CreateTables(db)
 	if err != nil {
 		log.Fatal("create tables [start]: ", err)
 	}
@@ -57,30 +67,30 @@ func main() {
 	}
 }
 
-func registerRoutes(r *mux.Router) {
+func registerRoutes(r *mux.Router, a *application) {
 	// /auth
-	r.HandleFunc("/auth/register", registerUser).Methods(http.MethodPost)
-	r.HandleFunc("/auth/login", loginUser).Methods(http.MethodPost)
+	r.HandleFunc("/auth/register", a.registerUser).Methods(http.MethodPost)
+	r.HandleFunc("/auth/login", a.loginUser).Methods(http.MethodPost)
 
 	// secure routes
 	s := r.PathPrefix("").Subrouter()
 	s.Use(middleware.CheckAuth)
 
 	// auth - update user
-	s.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", updateUser).Methods(http.MethodPatch)
+	s.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", a.updateUser).Methods(http.MethodPatch)
 
 	// /projects
-	s.HandleFunc("/projects", createProject).Methods(http.MethodPost)
-	s.HandleFunc("/projects", getProjects).Methods(http.MethodGet)
-	s.HandleFunc("/projects/{projectID}", getProject).Methods(http.MethodGet)
-	s.HandleFunc("/projects/{projectID}", updateProject).Methods(http.MethodPatch)
-	s.HandleFunc("/projects/{projectID}", deleteProject).Methods(http.MethodDelete)
+	s.HandleFunc("/projects", a.createProject).Methods(http.MethodPost)
+	s.HandleFunc("/projects", a.getProjects).Methods(http.MethodGet)
+	s.HandleFunc("/projects/{projectID}", a.getProject).Methods(http.MethodGet)
+	s.HandleFunc("/projects/{projectID}", a.updateProject).Methods(http.MethodPatch)
+	s.HandleFunc("/projects/{projectID}", a.deleteProject).Methods(http.MethodDelete)
 
 	// /tasks
-	s.HandleFunc("/projects", createTask).Methods(http.MethodPost)
-	s.HandleFunc("/tasks", getTasks).Methods(http.MethodGet)
-	s.HandleFunc("/tasks/{taskID}", getTask).Methods(http.MethodGet)
-	s.HandleFunc("/tasks/{projectID}", getTasksByProject).Methods(http.MethodGet)
-	s.HandleFunc("/tasks/{taskID}", updateTask).Methods(http.MethodPatch)
-	s.HandleFunc("/tasks/{taskID}", deleteTask).Methods(http.MethodDelete)
+	s.HandleFunc("/projects", a.createTask).Methods(http.MethodPost)
+	s.HandleFunc("/tasks", a.getTasks).Methods(http.MethodGet)
+	s.HandleFunc("/tasks/{taskID}", a.getTask).Methods(http.MethodGet)
+	s.HandleFunc("/tasks/{projectID}", a.getTasksByProject).Methods(http.MethodGet)
+	s.HandleFunc("/tasks/{taskID}", a.updateTask).Methods(http.MethodPatch)
+	s.HandleFunc("/tasks/{taskID}", a.deleteTask).Methods(http.MethodDelete)
 }
