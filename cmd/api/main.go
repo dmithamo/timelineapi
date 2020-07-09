@@ -9,36 +9,48 @@ import (
 	"time"
 
 	"github.com/dmithamo/timelineapi/pkg/dbservice"
-	"github.com/dmithamo/timelineapi/pkg/middleware"
+	"github.com/gomodule/redigo/redis"
 	"github.com/gorilla/mux"
 )
 
 // application collects all the <injectable> dependencies of the app
 type application struct {
-	db *sql.DB
+	db    *sql.DB
+	cache redis.Conn
 }
 
 func main() {
 	// initialize app, router, register middleware, add routes
 	app := &application{}
 	r := mux.NewRouter()
-	r.Use(middleware.SetCorsPolicy)
-	r.Use(middleware.EnforceContentType)
+	r.Use(app.SetCorsPolicy)
+	r.Use(app.EnforceContentType)
 	registerRoutes(r, app)
 
 	// parse flags, connect db, create tables start server
 	dsn := flag.String("dsn", "", "data source name for the db")
 	addr := flag.String("addr", ":3001", "address where to serve application")
 	rdb := flag.Bool("rdb", false, "set to true to drop all db tables and recreate them")
+	cdsn := flag.String("cdsn", "", "data source name for the cache storage service")
 	flag.Parse()
 
+	// connect to main db
 	db, err := dbservice.ConnectDB(dsn)
 	if err != nil {
 		log.Fatal("connectdb [start]: ", err)
 	}
 	defer db.Close()
-	// inject db (and other dependencies) into app
+
+	// connect to redis db
+	cache, err := dbservice.ConnectCache(cdsn)
+	if err != nil {
+		log.Fatal("connectcache [start]: ", err)
+	}
+	defer cache.Close()
+
+	// inject db, cache (and other dependencies) into app
 	app.db = db
+	app.cache = cache
 
 	if *rdb {
 		err := dbservice.DropTables(db)
@@ -74,7 +86,7 @@ func registerRoutes(r *mux.Router, a *application) {
 
 	// secure routes
 	s := r.PathPrefix("").Subrouter()
-	s.Use(middleware.CheckAuth)
+	s.Use(a.CheckAuth)
 
 	// auth - update user
 	s.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", a.updateUser).Methods(http.MethodPatch)

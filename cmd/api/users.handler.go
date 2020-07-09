@@ -5,20 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/dmithamo/timelineapi/pkg/users"
 	"github.com/dmithamo/timelineapi/pkg/utils"
+	"github.com/google/uuid"
 )
 
 // AuthError defines a generic auth error
 type AuthError struct {
 	Message string `json:"detail,omitempty"`
-}
-
-// AuthorizationToken defines the data returned after successful auth event
-type AuthorizationToken struct {
-	Token string      `json:"token,omitempty"`
-	User  users.Model `json:"user,omitempty"`
 }
 
 // register handles requests for creating new users
@@ -47,6 +43,7 @@ func (a *application) registerUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// success!
+	// TODO: login user after successful registration?
 	utils.SendJSONResponse(w, http.StatusCreated, "successfully created user", nil)
 }
 
@@ -54,9 +51,7 @@ func (a *application) registerUser(w http.ResponseWriter, r *http.Request) {
 // Accessible @ POST /auth/login
 func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	// for security reasons, exact err message is dropped in
-	// favor of obfuscatedErrMessage
-	obfuscatedErrMessage := AuthError{"wrong username or password"}
+	loginErrMessage := AuthError{"wrong username or password"}
 
 	var credentials users.Credentials
 	err := json.NewDecoder(r.Body).Decode(&credentials)
@@ -67,17 +62,16 @@ func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 
 	validationErrs := credentials.Validate()
 	if validationErrs != nil {
-		utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", obfuscatedErrMessage)
+		utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", loginErrMessage)
 		return
 	}
 
-	// proceed with login
 	var u users.Model
 	user, err := u.GetByCredentials(a.db, &credentials)
 	if err != nil {
 		if err == sql.ErrNoRows || err.Error() == utils.WRONG_PASSWORD_ERR {
 			// credentials no match!
-			utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", obfuscatedErrMessage)
+			utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", loginErrMessage)
 			return
 		}
 		// any other errs
@@ -85,13 +79,35 @@ func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// success!
-	utils.SendJSONResponse(w, http.StatusOK, "successfully logged in", generateAuthToken(user))
+	// if no err, sign user in
+	a.loginUserHelper(w, r, user)
 }
 
-// generateAuthToken generates an auth token and returns it with user embedded
-func generateAuthToken(user *users.Model) interface{} {
-	return AuthorizationToken{"fake-token-for-now", *user}
+// loginUserHelper logs a user in
+func (a *application) loginUserHelper(w http.ResponseWriter, r *http.Request, user *users.Model) {
+	// SESSION_TOKEN_LIFETIME is the time in seconds until expiration of a session_token
+	const SESSION_TOKEN_LIFETIME = 60 * 60
+
+	// generate session token, create a cookie for the client
+	token := uuid.New().String()
+	_, err := a.cache.Do("SETEX", token, SESSION_TOKEN_LIFETIME, user.UserID)
+
+	if err != nil {
+		utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err creating session: %v", err.Error()), nil)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		Expires:  time.Now().Add(SESSION_TOKEN_LIFETIME * time.Second),
+		HttpOnly: true,
+		Path:     "/",
+		SameSite: 1,
+	})
+
+	// success!
+	utils.SendJSONResponse(w, http.StatusOK, "successfully logged in", nil)
 }
 
 // updateUser handles request for editing user

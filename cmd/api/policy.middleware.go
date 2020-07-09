@@ -1,5 +1,4 @@
-// package middleware defines middleware fns
-package middleware
+package main
 
 import (
 	"net/http"
@@ -9,7 +8,7 @@ import (
 
 // EnforceContentType checks that the request body is JSON-formatted,
 // and sets the response content-type as JSON
-func EnforceContentType(next http.Handler) http.Handler {
+func (a *application) EnforceContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		allowedContentType := "application/json"
 		w.Header().Set("Content-Type", allowedContentType)
@@ -25,7 +24,7 @@ func EnforceContentType(next http.Handler) http.Handler {
 }
 
 // SetCorsPolicy set the cross origin request policy
-func SetCorsPolicy(next http.Handler) http.Handler {
+func (a *application) SetCorsPolicy(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
