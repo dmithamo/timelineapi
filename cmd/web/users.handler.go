@@ -75,7 +75,7 @@ func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 	var u users.Model
 	user, err := u.GetByCredentials(a.db, &credentials)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == sql.ErrNoRows || err.Error() == utils.WRONG_PASSWORD_ERR {
 			// credentials no match!
 			utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", obfuscatedErrMessage)
 			return

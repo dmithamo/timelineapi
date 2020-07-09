@@ -4,10 +4,13 @@ package users
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"time"
 
 	"github.com/dmithamo/timelineapi/pkg/dbservice"
+	"github.com/dmithamo/timelineapi/pkg/security"
+	"github.com/dmithamo/timelineapi/pkg/utils"
 )
 
 // Credentials defines the params requisite for user creation
@@ -86,27 +89,38 @@ func (m *Model) CreateUser(db *sql.DB, credentials *Credentials) error {
 	}
 	defer stmt.Close()
 
-	// TODO: hash password before insert
-	_, err = stmt.Exec(credentials.Username, credentials.Password)
+	pwdHash, err := security.GeneratePasswordHash(&credentials.Password)
+	if err != nil {
+		return fmt.Errorf("error hashing password: %v", err.Error())
+	}
 
+	_, err = stmt.Exec(credentials.Username, pwdHash)
 	return dbservice.CheckDatabaseErr(err, "username")
 }
 
 // GetByCredentials retrieves a user from the db by username, password - for login
 func (m *Model) GetByCredentials(db *sql.DB, credentials *Credentials) (*Model, error) {
+	var pwdHash string
+	var userID string
 	var user Model
-	stmt, err := db.Prepare("SELECT BIN_TO_UUID(userID) userID FROM users WHERE username=? AND password=?")
+
+	stmt, err := db.Prepare("SELECT BIN_TO_UUID(userID) userID, password FROM users WHERE username=?")
 	if err != nil {
 		return nil, err
 	}
 	defer stmt.Close()
 
-	// TODO: hash password before select
-	err = stmt.QueryRow(credentials.Username, credentials.Password).Scan(&user.UserID)
+	err = stmt.QueryRow(credentials.Username).Scan(&userID, &pwdHash)
 	if err != nil {
 		return nil, err
 	}
 
+	isCorrectPwd := security.VerifyPassword(&pwdHash, &credentials.Password)
+	if !isCorrectPwd {
+		return nil, fmt.Errorf(utils.WRONG_PASSWORD_ERR)
+	}
+
+	user.UserID = userID
 	return &user, nil
 }
 
