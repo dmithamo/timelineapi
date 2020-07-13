@@ -91,18 +91,18 @@ func registerRoutes(r *mux.Router, a *application) {
 	// auth - update user
 	s.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", a.updateUser).Methods(http.MethodPatch)
 
-	// /projects
-	s.HandleFunc("/projects", a.createProject).Methods(http.MethodPost)
-	s.HandleFunc("/projects", a.getProjects).Methods(http.MethodGet)
-	s.HandleFunc("/projects/{projectID}", a.getProject).Methods(http.MethodGet)
-	s.HandleFunc("/projects/{projectID}", a.updateProject).Methods(http.MethodPatch)
-	s.HandleFunc("/projects/{projectID}", a.deleteProject).Methods(http.MethodDelete)
+	// /actions
+	s.HandleFunc("/actions", a.createAction).Methods(http.MethodPost)
+	s.HandleFunc("/actions", a.getActions).Methods(http.MethodGet)
+	s.HandleFunc("/actions/{actionID}", a.getAction).Methods(http.MethodGet)
+	s.HandleFunc("/actions/{actionID}", a.updateAction).Methods(http.MethodPatch)
+	s.HandleFunc("/actions/{actionID}", a.deleteAction).Methods(http.MethodDelete)
 
-	// /tasks
-	s.HandleFunc("/projects", a.createTask).Methods(http.MethodPost)
-	s.HandleFunc("/tasks", a.getTasks).Methods(http.MethodGet)
-	s.HandleFunc("/tasks/{taskID}", a.getTask).Methods(http.MethodGet)
-	s.HandleFunc("/tasks/{projectID}", a.getTasksByProject).Methods(http.MethodGet)
-	s.HandleFunc("/tasks/{taskID}", a.updateTask).Methods(http.MethodPatch)
-	s.HandleFunc("/tasks/{taskID}", a.deleteTask).Methods(http.MethodDelete)
+	// /outputs
+	s.HandleFunc("/outputs", a.createOutput).Methods(http.MethodPost)
+	s.HandleFunc("/outputs", a.getOutputs).Methods(http.MethodGet)
+	s.HandleFunc("/outputs/{outputID}", a.getOutput).Methods(http.MethodGet)
+	s.HandleFunc("/outputs/{actionID}", a.getOutputsByAction).Methods(http.MethodGet)
+	s.HandleFunc("/outputs/{actionID}", a.updateOutput).Methods(http.MethodPatch)
+	s.HandleFunc("/outputs/{actionID}", a.deleteOutput).Methods(http.MethodDelete)
 }
