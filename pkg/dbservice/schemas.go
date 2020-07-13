@@ -16,9 +16,9 @@ func initializeSchemas() {
 			)
 		`,
 
-		"projects": `
+		"actions": `
 			(
-				projectID BINARY(16) PRIMARY KEY,
+				actionID BINARY(16) PRIMARY KEY,
 				title VARCHAR(100) UNIQUE NOT NULL,
 				description TEXT NOT NULL,
 				createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -26,9 +26,9 @@ func initializeSchemas() {
 			)
 		`,
 
-		"tasks": `
+		"outputs": `
 			(
-				taskID BINARY(16) PRIMARY KEY,
+				outputID BINARY(16) PRIMARY KEY,
 				title VARCHAR(100) UNIQUE NOT NULL,
 				description TEXT NOT NULL,
 				createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
