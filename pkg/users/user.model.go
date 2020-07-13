@@ -1,9 +1,8 @@
-// package users defines the structure of user data as will exist in the db
+// package users contains functionality for managing user data
 package users
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"time"
@@ -27,50 +26,35 @@ type Model struct {
 	UpdatedAt time.Time `json:"-"`
 }
 
-// ValidationErrs collects errs from validating user credentials
-type ValidationErrs struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-}
+// regexes for valid creds
+var validEmailRegex *regexp.Regexp = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+var invalidPasswordRegex *regexp.Regexp = regexp.MustCompile("^(.{0,7}|[^0-9]*|[^A-Z]*|[^a-z]*|[a-zA-Z0-9]*)$")
 
-// Error is defined here inorder to qualify ValidationErrs as being a valid `error` type
-func (v ValidationErrs) Error() string {
-	var errs ValidationErrs
-	validationErrs, err := FormatErrs(errs)
-	if err != nil {
-		return err.Error()
-	}
+// error messages
+var invalidEmailMessage string = "invalid username. Use a valid email address"
+var invalidPasswordMessage string = "invalid password. Use at least 8 characters, combining uppercase letters, lowercase letters, digits, and special characters"
 
-	return string(validationErrs)
-}
-
-// FormatErrs structures validation errs as a jsonified string
-func FormatErrs(errs ValidationErrs) ([]byte, error) {
-	validationErrs, marshallingErr := json.MarshalIndent(&errs, "", "   ")
-	if marshallingErr != nil {
-		return nil, marshallingErr
-	}
-
-	return validationErrs, nil
+// Error is defined here inorder to qualify validation errs (modelled on Credentials)
+// as being a valid `error` type
+// It is otherwise quite useless
+func (c Credentials) Error() string {
+	return "err in user credentials"
 }
 
 // Validate checks that user credentials are valid
 func (c *Credentials) Validate() error {
-	validEmailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
-	invalidPasswordRegex := regexp.MustCompile("^(.{0,7}|[^0-9]*|[^A-Z]*|[^a-z]*|[a-zA-Z0-9]*)$")
-
 	isInvalidPassword := invalidPasswordRegex.MatchString(c.Password)
 	isvalidUsername := validEmailRegex.MatchString(c.Username)
 
 	hasErrors := false
-	validationErrs := &ValidationErrs{}
+	validationErrs := &Credentials{}
 	if isInvalidPassword {
-		validationErrs.Password = "password should be at least 8 characters long, combining uppercase letters, lowercase letters, digits, and special characters"
+		validationErrs.Password = invalidPasswordMessage
 		hasErrors = true
 	}
 
 	if !isvalidUsername {
-		validationErrs.Username = "username should be a valid email address"
+		validationErrs.Username = invalidEmailMessage
 		hasErrors = true
 	}
 
@@ -124,7 +108,26 @@ func (m *Model) GetByCredentials(db *sql.DB, credentials *Credentials) (*Model, 
 	return &user, nil
 }
 
-// Update updates a property of a user in the db
-func (u *Model) Update(db *sql.DB, id string) error {
+// UpdatePassword updates an action's title or description
+func (m *Model) UpdatePassword(db *sql.DB, userID string, password string) error {
+	if invalidPasswordRegex.MatchString(password) {
+		return fmt.Errorf(invalidPasswordMessage)
+	}
+
+	stmt, err := db.Prepare("UPDATE users SET password = ? WHERE userID = ?")
+	if err != nil {
+		return err
+	}
+
+	pwdHash, err := security.GeneratePasswordHash(&password)
+	if err != nil {
+		return err
+	}
+
+	_, err = stmt.Exec(pwdHash, userID)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
