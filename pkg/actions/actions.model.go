@@ -38,7 +38,7 @@ func (p *Params) Validate() error {
 	}
 
 	if !validDescription.MatchString(p.Description) {
-		validationErrs.Title = "invalid description. Use letters, numbers and underscores only, and keep it between 4 and 200 chars long"
+		validationErrs.Description = "invalid description. Use letters, numbers and underscores only, and keep it between 4 and 200 chars long"
 	}
 
 	return validationErrs
@@ -67,6 +67,7 @@ func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
 	}
 
 	rows, err := stmt.Query()
+
 	if err != nil {
 		return nil, err
 	}
