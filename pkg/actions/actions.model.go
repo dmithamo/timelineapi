@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
+
+	"github.com/dmithamo/timelineapi/pkg/dbservice"
 )
 
 // Params defines the structure of a valid action
@@ -27,18 +30,37 @@ type Model struct {
 	UpdatedAt time.Time `json:"updatedAt,omitempty"`
 }
 
+//regexes for valid input
+var validTitle = regexp.MustCompile(`^[a-zA-Z].([A-Za-z0-9_ ]){3,50}$`)
+var validDescription = regexp.MustCompile(`^[a-zA-Z].([A-Za-z0-9_ ]){3,100}$`)
+
 // Validate checks the action params for errs
 func (p *Params) Validate() error {
-	validTitle := regexp.MustCompile(`[a-zA-Z0-9_]{4,50}`)
-	validDescription := regexp.MustCompile(`[a-zA-Z0-9_]{4,200}`)
-	var validationErrs *Params = &Params{}
+
+	hasErrors := false
+	validationErrs := &Params{}
 
 	if !validTitle.MatchString(p.Title) {
-		validationErrs.Title = "invalid title. Use letters, numbers and underscores only, and keep it between 4 and 50 chars long"
+		if p.Title == "" {
+			validationErrs.Title = "title is required"
+		} else {
+			validationErrs.Title = "invalid title. Use letters, numbers and underscores only, and keep it between 4 and 50 chars long"
+		}
+		hasErrors = true
 	}
 
 	if !validDescription.MatchString(p.Description) {
-		validationErrs.Description = "invalid description. Use letters, numbers and underscores only, and keep it between 4 and 200 chars long"
+		if p.Description == "" {
+			validationErrs.Description = "description is required"
+		} else {
+			validationErrs.Description = "invalid description. Use letters, numbers and underscores only, and keep it between 4 and 200 chars long"
+		}
+
+		hasErrors = true
+	}
+
+	if !hasErrors {
+		return nil
 	}
 
 	return validationErrs
@@ -46,14 +68,14 @@ func (p *Params) Validate() error {
 
 // CreateAction adds a new action in the db
 func (m *Model) CreateAction(db *sql.DB, params Params) error {
-	stmt, err := db.Prepare("INSERT INTO actions (title,description) VALUES(?,?)")
+	stmt, err := db.Prepare("INSERT INTO actions (actionID, title, description) VALUES(?, ?, ?)")
 	if err != nil {
 		return err
 	}
 
-	_, err = stmt.Exec(params.Title, params.Description)
+	_, err = stmt.Exec(makeSlugHelper(params.Title), params.Title, params.Description)
 	if err != nil {
-		return err
+		return dbservice.CheckDatabaseErr(err, "title")
 	}
 
 	return nil
@@ -63,7 +85,7 @@ func (m *Model) CreateAction(db *sql.DB, params Params) error {
 func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
 	stmt, err := db.Prepare("SELECT * FROM actions")
 	if err != nil {
-		return nil, err
+		return nil, dbservice.CheckDatabaseErr(err)
 	}
 
 	rows, err := stmt.Query()
@@ -76,7 +98,7 @@ func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
 	for rows.Next() {
 		var action Model
 
-		err := rows.Scan(&action)
+		err := rows.Scan(&action.ActionID, &action.Title, &action.Description, &action.CreatedAt, &action.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -93,15 +115,15 @@ func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
 
 // GetActionByID retrueves a single action by its actionID
 func (m *Model) GetActionByID(db *sql.DB, actionID string) (*Model, error) {
-	stmt, err := db.Prepare("SELECT * FROM actions WHERE actionID=?")
+	stmt, err := db.Prepare(fmt.Sprintf("SELECT * FROM actions WHERE actionID='%v'", actionID))
 	if err != nil {
 		return nil, err
 	}
 
-	var action Model
-	err = stmt.QueryRow(actionID).Scan(&action)
+	action := Model{}
+	err = stmt.QueryRow().Scan(&action.ActionID, &action.Title, &action.Description, &action.CreatedAt, &action.UpdatedAt)
 	if err != nil {
-		return nil, action
+		return nil, err
 	}
 
 	return &action, nil
@@ -136,4 +158,9 @@ func (m *Model) UpdateAction(db *sql.DB, actionID string, params Params) error {
 	}
 
 	return nil
+}
+
+// makeSlugHelper prepares a slug given the title
+func makeSlugHelper(title string) string {
+	return strings.ToLower(strings.Join(strings.Split(title, " "), "-"))
 }

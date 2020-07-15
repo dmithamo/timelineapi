@@ -43,18 +43,26 @@ func (c Credentials) Error() string {
 
 // Validate checks that user credentials are valid
 func (c *Credentials) Validate() error {
-	isInvalidPassword := invalidPasswordRegex.MatchString(c.Password)
-	isvalidUsername := validEmailRegex.MatchString(c.Username)
 
 	hasErrors := false
 	validationErrs := &Credentials{}
-	if isInvalidPassword {
-		validationErrs.Password = invalidPasswordMessage
+
+	if invalidPasswordRegex.MatchString(c.Password) {
+		if c.Password == "" {
+			validationErrs.Password = "password is required"
+		} else {
+			validationErrs.Password = invalidPasswordMessage
+		}
 		hasErrors = true
 	}
 
-	if !isvalidUsername {
-		validationErrs.Username = invalidEmailMessage
+	if !validEmailRegex.MatchString(c.Username) {
+		if c.Username == "" {
+			validationErrs.Username = "username is required"
+		} else {
+			validationErrs.Username = invalidEmailMessage
+		}
+
 		hasErrors = true
 	}
 
