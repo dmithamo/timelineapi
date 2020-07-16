@@ -2,6 +2,7 @@ package dbservice
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/VividCortex/mysqlerr"
 	"github.com/go-sql-driver/mysql"
@@ -15,7 +16,7 @@ func CheckDatabaseErr(err error, uniqueColum ...string) error {
 
 	// db driver errs that we are currently checking
 	driverErrs := map[uint16]error{
-		mysqlerr.ER_DUP_ENTRY: fmt.Errorf("%v is already in use", uniqueColum),
+		mysqlerr.ER_DUP_ENTRY: fmt.Errorf("%v is already in use", strings.Join(uniqueColum, ", ")),
 	}
 
 	// verify that err is driver specific err

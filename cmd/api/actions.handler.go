@@ -20,29 +20,42 @@ type ActionErr struct {
 // Accessible @ POST /actions
 func (a *application) createAction(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-
 	var actionParams actions.Params
-	err := json.NewDecoder(r.Body).Decode(&actionParams)
-	if err != nil {
-		utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err decoding request body: %v", err.Error()), nil)
+
+	decodeErr := json.NewDecoder(r.Body).Decode(&actionParams)
+	if decodeErr != nil {
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: fmt.Sprintf("err decoding request body: %v", decodeErr.Error()),
+			Data:    nil,
+		})
 		return
 	}
 
 	validationErrs := actionParams.Validate()
 	if validationErrs != nil {
-		utils.SendJSONResponse(w, http.StatusBadRequest, "invalid action params", validationErrs)
+		utils.SendJSONResponse(w, http.StatusBadRequest, &utils.GenericJSONRes{
+			Message: "validation errors in params",
+			Data:    validationErrs,
+		})
 		return
 	}
 
-	var actionModel actions.Model
-	err = actionModel.CreateAction(a.db, actionParams)
-	if err != nil {
-		utils.SendJSONResponse(w, http.StatusBadRequest, "unable to create action", ActionErr{err.Error()})
+	var m actions.Model
+
+	createActionErr := m.CreateAction(a.db, actionParams)
+	if createActionErr != nil {
+		utils.SendJSONResponse(w, http.StatusBadRequest, &utils.GenericJSONRes{
+			Message: "err creating action",
+			Data:    ActionErr{createActionErr.Error()},
+		})
 		return
 	}
 
 	// success!
-	utils.SendJSONResponse(w, http.StatusCreated, "successfully created action", nil)
+	utils.SendJSONResponse(w, http.StatusCreated, &utils.GenericJSONRes{
+		Message: "successfully created action",
+		Data:    nil,
+	})
 }
 
 // getActions handles requests for retrieving all Actions
@@ -50,19 +63,27 @@ func (a *application) createAction(w http.ResponseWriter, r *http.Request) {
 func (a *application) getActions(w http.ResponseWriter, r *http.Request) {
 	var actionModel actions.Model
 
-	actions, err := actionModel.GetActions(a.db)
-	if err != nil || actions == nil {
-		if err == sql.ErrNoRows || actions == nil {
-			// TODO: no actions found. Should this be a 404?
-			utils.SendJSONResponse(w, http.StatusNotFound, "no actions found", nil)
+	allActions, err := actionModel.GetActions(a.db)
+	if err != nil || allActions == nil {
+		if err == sql.ErrNoRows || allActions == nil {
+			utils.SendJSONResponse(w, http.StatusNotFound, &utils.GenericJSONRes{
+				Message: "no actions found",
+				Data:    nil,
+			})
 			return
 		}
 
-		utils.SendJSONResponse(w, http.StatusBadRequest, "unable to retrieve actions", ActionErr{err.Error()})
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: "err retrieving actions",
+			Data:    ActionErr{err.Error()},
+		})
 		return
 	}
 
-	utils.SendJSONResponse(w, http.StatusOK, "successfully retrieved actions", actions)
+	utils.SendJSONResponse(w, http.StatusOK, &utils.GenericJSONRes{
+		Message: "successfully retrieved actions",
+		Data:    allActions,
+	})
 }
 
 // getAction handles requests for retrieving a single Action by ActionID
@@ -71,19 +92,30 @@ func (a *application) getAction(w http.ResponseWriter, r *http.Request) {
 	var actionModel actions.Model
 
 	actionID := mux.Vars(r)["actionID"]
-
 	action, err := actionModel.GetActionByID(a.db, actionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			utils.SendJSONResponse(w, http.StatusNotFound, fmt.Sprintf("no action found with actionID `%v`", actionID), nil)
+			utils.SendJSONResponse(w, http.StatusNotFound,
+				&utils.GenericJSONRes{
+					Message: fmt.Sprintf("no actions found with actionID: %v", actionID),
+					Data:    nil,
+				})
+
 			return
 		}
 
-		utils.SendJSONResponse(w, http.StatusBadRequest, "unable to retrieve action", ActionErr{err.Error()})
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: "err retrieving action",
+			Data:    ActionErr{err.Error()},
+		})
+
 		return
 	}
 
-	utils.SendJSONResponse(w, http.StatusOK, "successfully retrieved actions", action)
+	utils.SendJSONResponse(w, http.StatusOK, &utils.GenericJSONRes{
+		Message: "successfully retrieved action",
+		Data:    action,
+	})
 }
 
 // updateAction handles requests for editing Action

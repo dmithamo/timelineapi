@@ -13,11 +13,21 @@ func CheckAuth(next http.Handler) http.Handler {
 		_, err := r.Cookie("session_token")
 		if err != nil {
 			if err == http.ErrNoCookie {
-				utils.SendJSONResponse(w, http.StatusUnauthorized, "no valid authorization token. Login to continue", nil)
+				utils.SendJSONResponse(w, http.StatusUnauthorized,
+					&utils.GenericJSONRes{
+						Message: "no valid authorization token. Login to continue",
+						Data:    nil,
+					})
 				return
 			}
+
 			// other errs
-			utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err reading authorization: %v", err.Error()), nil)
+			utils.SendJSONResponse(w, http.StatusInternalServerError,
+				&utils.GenericJSONRes{
+					Message: fmt.Sprintf("err reading authorization: %v", err.Error()),
+					Data:    nil,
+				})
+
 			return
 		}
 

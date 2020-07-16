@@ -21,66 +21,95 @@ type AuthError struct {
 // Accessible @ POST /auth/register
 func (a *application) registerUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+	credentials, ok := a.decodeParamsHelper(w, r)
 
-	var credentials users.Credentials
-	err := json.NewDecoder(r.Body).Decode(&credentials)
-	if err != nil {
-		utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err decoding request body: %v", err.Error()), nil)
-		return
-	}
-
-	validationErrs := credentials.Validate()
-	if validationErrs != nil {
-		utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", validationErrs)
+	if !ok {
+		// err is already handled (sent back as jsonRes to user)
 		return
 	}
 
 	var u users.Model
-	err = u.CreateUser(a.db, &credentials)
+	err := u.CreateUser(a.db, credentials)
+
 	if err != nil {
-		utils.SendJSONResponse(w, http.StatusBadRequest, "unable to create user", AuthError{err.Error()})
+		utils.SendJSONResponse(w, http.StatusBadRequest, &utils.GenericJSONRes{
+			Message: "err creating user",
+			Data:    AuthError{err.Error()},
+		})
+
 		return
 	}
 
 	// success!
 	// TODO: login user after successful registration?
-	utils.SendJSONResponse(w, http.StatusCreated, "successfully created user", nil)
+	utils.SendJSONResponse(w, http.StatusCreated, &utils.GenericJSONRes{
+		Message: "successfully created user",
+		Data:    nil,
+	})
 }
 
 // login handles requests for login
 // Accessible @ POST /auth/login
 func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	loginErrMessage := AuthError{"wrong username or password"}
+	credentials, ok := a.decodeParamsHelper(w, r)
 
-	var credentials users.Credentials
-	err := json.NewDecoder(r.Body).Decode(&credentials)
-	if err != nil {
-		utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err decoding request body: %v", err.Error()), nil)
-		return
-	}
-
-	validationErrs := credentials.Validate()
-	if validationErrs != nil {
-		utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", loginErrMessage)
+	if !ok {
+		// err is already handled (sent back as jsonRes to user)
 		return
 	}
 
 	var u users.Model
-	user, err := u.GetByCredentials(a.db, &credentials)
+	user, err := u.GetByCredentials(a.db, credentials)
+
 	if err != nil {
 		if err == sql.ErrNoRows || err.Error() == utils.WRONG_PASSWORD_ERR {
-			// credentials no match!
-			utils.SendJSONResponse(w, http.StatusBadRequest, "invalid user credentials", loginErrMessage)
+			utils.SendJSONResponse(w, http.StatusBadRequest, &utils.GenericJSONRes{
+				Message: "wrong username or password",
+				Data:    nil,
+			})
+
 			return
 		}
+
 		// any other errs
-		utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err loging in: %v", err.Error()), nil)
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: fmt.Sprintf("err loggin in: %v", err.Error()),
+			Data:    nil,
+		})
+
 		return
 	}
 
 	// if no err, sign user in
 	a.loginUserHelper(w, r, user)
+}
+
+// decodeParamsHelper decodes request body into a credentials struct
+func (a *application) decodeParamsHelper(w http.ResponseWriter, r *http.Request) (*users.Credentials, bool) {
+	var credentials users.Credentials
+	err := json.NewDecoder(r.Body).Decode(&credentials)
+
+	if err != nil {
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: fmt.Sprintf("err decoding request body: %v", err.Error()),
+			Data:    nil,
+		})
+
+		return nil, false
+	}
+
+	validationErrs := credentials.Validate()
+	if validationErrs != nil {
+		utils.SendJSONResponse(w, http.StatusBadRequest, &utils.GenericJSONRes{
+			Message: "invalid user credentials",
+			Data:    validationErrs,
+		})
+
+		return nil, false
+	}
+
+	return &credentials, true
 }
 
 // loginUserHelper logs a user in
@@ -98,7 +127,10 @@ func (a *application) loginUserHelper(w http.ResponseWriter, r *http.Request, us
 	})
 
 	// success!
-	utils.SendJSONResponse(w, http.StatusOK, "successfully logged in", nil)
+	utils.SendJSONResponse(w, http.StatusOK, &utils.GenericJSONRes{
+		Message: "successfully logged in",
+		Data:    nil,
+	})
 }
 
 // updateUser handles request for editing user

@@ -13,9 +13,18 @@ func EnforceContentType(next http.Handler) http.Handler {
 		allowedContentType := "application/json"
 		w.Header().Set("Content-Type", allowedContentType)
 
-		if (r.Method == http.MethodPost || r.Method == http.MethodPatch) &&
-			r.Header.Get("Content-Type") != allowedContentType {
-			utils.SendJSONResponse(w, http.StatusUnprocessableEntity, "Bad request. Request body should be valid JSON", nil)
+		isForbiddenCT := (r.Method == http.MethodPost ||
+			r.Method == http.MethodPatch ||
+			r.Method == http.MethodPut) &&
+			r.Header.Get("Content-Type") != allowedContentType
+
+		if isForbiddenCT {
+			utils.SendJSONResponse(w, http.StatusUnprocessableEntity,
+				&utils.GenericJSONRes{
+					Message: "bad request. Request body should be valid JSON",
+					Data:    nil,
+				})
+
 			return
 		}
 
@@ -31,7 +40,12 @@ func SetCorsPolicy(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
 
 		if r.Method == "OPTIONS" {
-			utils.SendJSONResponse(w, http.StatusNotImplemented, "Not supported", nil)
+			utils.SendJSONResponse(w, http.StatusNotImplemented,
+				&utils.GenericJSONRes{
+					Message: "unsupported request method `options`",
+					Data:    nil,
+				})
+
 			return
 		}
 
