@@ -87,6 +87,7 @@ func (m *Model) CreateUser(db *sql.DB, credentials *Credentials) error {
 	}
 
 	_, err = stmt.Exec(credentials.Username, pwdHash)
+
 	return dbservice.CheckDatabaseErr(err, "username")
 }
 

@@ -9,29 +9,26 @@ import (
 	"time"
 
 	"github.com/dmithamo/timelineapi/pkg/dbservice"
-	"github.com/gomodule/redigo/redis"
+	"github.com/dmithamo/timelineapi/pkg/middleware"
 	"github.com/gorilla/mux"
 )
 
 // application collects all the <injectable> dependencies of the app
 type application struct {
-	db    *sql.DB
-	cache redis.Conn
+	db *sql.DB
 }
 
 func main() {
 	// initialize app, router, register middleware, add routes
 	app := &application{}
 	r := mux.NewRouter()
-	r.Use(app.SetCorsPolicy)
-	r.Use(app.EnforceContentType)
-	registerRoutes(r, app)
+
+	go registerRoutesAndMiddleware(r, app)
 
 	// parse flags, connect db, create tables start server
 	dsn := flag.String("dsn", "", "data source name for the db")
 	addr := flag.String("addr", ":3001", "address where to serve application")
 	rdb := flag.Bool("rdb", false, "set to true to drop all db tables and recreate them")
-	cdsn := flag.String("cdsn", "", "data source name for the cache storage service")
 	flag.Parse()
 
 	// connect to main db
@@ -41,16 +38,8 @@ func main() {
 	}
 	defer db.Close()
 
-	// connect to redis db
-	cache, err := dbservice.ConnectCache(cdsn)
-	if err != nil {
-		log.Fatal("connectcache [start]: ", err)
-	}
-	defer cache.Close()
-
 	// inject db, cache (and other dependencies) into app
 	app.db = db
-	app.cache = cache
 
 	if *rdb {
 		err := dbservice.DropTables(db)
@@ -79,14 +68,19 @@ func main() {
 	}
 }
 
-func registerRoutes(r *mux.Router, a *application) {
+func registerRoutesAndMiddleware(r *mux.Router, a *application) {
+	// router-wide middleware
+	r.Use(middleware.RequestLogger)
+	r.Use(middleware.SetCorsPolicy)
+	r.Use(middleware.EnforceContentType)
+
 	// /auth
 	r.HandleFunc("/auth/register", a.registerUser).Methods(http.MethodPost)
 	r.HandleFunc("/auth/login", a.loginUser).Methods(http.MethodPost)
 
 	// secure routes
 	s := r.PathPrefix("").Subrouter()
-	s.Use(a.CheckAuth)
+	s.Use(middleware.CheckAuth)
 
 	// auth - update user
 	s.HandleFunc("/auth/register/{userID:[a-z0-9-]+}", a.updateUser).Methods(http.MethodPatch)

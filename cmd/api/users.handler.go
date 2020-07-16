@@ -85,22 +85,13 @@ func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 
 // loginUserHelper logs a user in
 func (a *application) loginUserHelper(w http.ResponseWriter, r *http.Request, user *users.Model) {
-	// SESSION_TOKEN_LIFETIME is the time in seconds until expiration of a session_token
-	const SESSION_TOKEN_LIFETIME = 60 * 60
-
 	// generate session token, create a cookie for the client
 	token := uuid.New().String()
-	_, err := a.cache.Do("SETEX", token, SESSION_TOKEN_LIFETIME, user.UserID)
-
-	if err != nil {
-		utils.SendJSONResponse(w, http.StatusInternalServerError, fmt.Sprintf("err creating session: %v", err.Error()), nil)
-		return
-	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    token,
-		Expires:  time.Now().Add(SESSION_TOKEN_LIFETIME * time.Second),
+		Expires:  time.Now().Add(60 * time.Second),
 		HttpOnly: true,
 		Path:     "/",
 		SameSite: 1,
