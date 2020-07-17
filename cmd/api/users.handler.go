@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dmithamo/timelineapi/pkg/users"
+	"github.com/dmithamo/timelineapi/pkg/models"
+	"github.com/dmithamo/timelineapi/pkg/security"
 	"github.com/dmithamo/timelineapi/pkg/utils"
-	"github.com/google/uuid"
 )
 
 // AuthError defines a generic auth error
@@ -28,7 +28,7 @@ func (a *application) registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var u users.Model
+	var u models.User
 	err := u.CreateUser(a.db, credentials)
 
 	if err != nil {
@@ -59,7 +59,7 @@ func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var u users.Model
+	var u models.User
 	user, err := u.GetByCredentials(a.db, credentials)
 
 	if err != nil {
@@ -86,9 +86,9 @@ func (a *application) loginUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // decodeParamsHelper decodes request body into a credentials struct
-func (a *application) decodeParamsHelper(w http.ResponseWriter, r *http.Request) (*users.Credentials, bool) {
-	var credentials users.Credentials
-	err := json.NewDecoder(r.Body).Decode(&credentials)
+func (a *application) decodeParamsHelper(w http.ResponseWriter, r *http.Request) (*models.UserCredentials, bool) {
+	var credentials = &models.UserCredentials{}
+	err := json.NewDecoder(r.Body).Decode(credentials)
 
 	if err != nil {
 		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
@@ -109,18 +109,25 @@ func (a *application) decodeParamsHelper(w http.ResponseWriter, r *http.Request)
 		return nil, false
 	}
 
-	return &credentials, true
+	return credentials, true
 }
 
 // loginUserHelper logs a user in
-func (a *application) loginUserHelper(w http.ResponseWriter, r *http.Request, user *users.Model) {
+func (a *application) loginUserHelper(w http.ResponseWriter, r *http.Request, user *models.User) {
 	// generate session token, create a cookie for the client
-	token := uuid.New().String()
+	token, err := security.GenerateToken(user.UserID)
+
+	if err != nil {
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: "err logging in",
+			Data:    AuthError{err.Error()},
+		})
+		return
+	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
-		Value:    token,
-		Expires:  time.Now().Add(60 * time.Second),
+		Value:    *token,
 		HttpOnly: true,
 		Path:     "/",
 		SameSite: 1,
@@ -129,6 +136,24 @@ func (a *application) loginUserHelper(w http.ResponseWriter, r *http.Request, us
 	// success!
 	utils.SendJSONResponse(w, http.StatusOK, &utils.GenericJSONRes{
 		Message: "successfully logged in",
+		Data:    nil,
+	})
+}
+
+// loginUser logs a user out
+func (a *application) logoutUser(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		HttpOnly: true,
+		Expires:  time.Unix(0, 0),
+		Path:     "/",
+		SameSite: 1,
+	})
+
+	// success!
+	utils.SendJSONResponse(w, http.StatusOK, &utils.GenericJSONRes{
+		Message: "",
 		Data:    nil,
 	})
 }

@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dmithamo/timelineapi/pkg/actions"
+	"github.com/dmithamo/timelineapi/pkg/models"
+	"github.com/dmithamo/timelineapi/pkg/security"
 	"github.com/dmithamo/timelineapi/pkg/utils"
 	"github.com/gorilla/mux"
 )
@@ -20,7 +21,7 @@ type ActionErr struct {
 // Accessible @ POST /actions
 func (a *application) createAction(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	var actionParams actions.Params
+	var actionParams models.ActionParams
 
 	decodeErr := json.NewDecoder(r.Body).Decode(&actionParams)
 	if decodeErr != nil {
@@ -40,9 +41,16 @@ func (a *application) createAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var m actions.Model
-
-	createActionErr := m.CreateAction(a.db, actionParams)
+	var actionModel models.Action
+	userID, err := security.DecodeToken(r)
+	if err != nil {
+		utils.SendJSONResponse(w, http.StatusInternalServerError, &utils.GenericJSONRes{
+			Message: "err creating action",
+			Data:    ActionErr{err.Error()},
+		})
+		return
+	}
+	createActionErr := actionModel.CreateAction(a.db, actionParams, userID.(string))
 	if createActionErr != nil {
 		utils.SendJSONResponse(w, http.StatusBadRequest, &utils.GenericJSONRes{
 			Message: "err creating action",
@@ -61,7 +69,7 @@ func (a *application) createAction(w http.ResponseWriter, r *http.Request) {
 // getActions handles requests for retrieving all Actions
 // Accessible @ GET /actions
 func (a *application) getActions(w http.ResponseWriter, r *http.Request) {
-	var actionModel actions.Model
+	var actionModel models.Action
 
 	allActions, err := actionModel.GetActions(a.db)
 	if err != nil || allActions == nil {
@@ -89,7 +97,7 @@ func (a *application) getActions(w http.ResponseWriter, r *http.Request) {
 // getAction handles requests for retrieving a single Action by ActionID
 // Accessible @ GET /actions/{actionID}
 func (a *application) getAction(w http.ResponseWriter, r *http.Request) {
-	var actionModel actions.Model
+	var actionModel models.Action
 
 	actionID := mux.Vars(r)["actionID"]
 	action, err := actionModel.GetActionByID(a.db, actionID)

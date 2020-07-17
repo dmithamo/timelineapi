@@ -1,5 +1,4 @@
-// package users contains functionality for managing user data
-package users
+package models
 
 import (
 	"database/sql"
@@ -12,16 +11,16 @@ import (
 	"github.com/dmithamo/timelineapi/pkg/utils"
 )
 
-// Credentials defines the params requisite for user creation
-type Credentials struct {
+// UserCredentials defines the params requisite for user creation
+type UserCredentials struct {
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 }
 
-// Model defines a user fully
-type Model struct {
+// User defines a user fully
+type User struct {
 	UserID string `json:"userID,omitempty"`
-	Credentials
+	UserCredentials
 	CreatedAt time.Time `json:"-"`
 	UpdatedAt time.Time `json:"-"`
 }
@@ -37,34 +36,37 @@ var invalidPasswordMessage string = "invalid password. Use at least 8 characters
 // Error is defined here inorder to qualify validation errs (modelled on Credentials)
 // as being a valid `error` type
 // It is otherwise quite useless
-func (c Credentials) Error() string {
+func (c UserCredentials) Error() string {
 	return "err in user credentials"
 }
 
 // Validate checks that user credentials are valid
-func (c *Credentials) Validate() error {
+func (c *UserCredentials) Validate() error {
 
+	validationErrs := &UserCredentials{}
 	hasErrors := false
-	validationErrs := &Credentials{}
 
-	if invalidPasswordRegex.MatchString(c.Password) {
-		if c.Password == "" {
-			validationErrs.Password = "password is required"
-		} else {
-			validationErrs.Password = invalidPasswordMessage
+	func() {
+		if invalidPasswordRegex.MatchString(c.Password) {
+			if c.Password == "" {
+				validationErrs.Password = "password is required"
+			} else {
+				validationErrs.Password = invalidPasswordMessage
+			}
+			hasErrors = true
 		}
-		hasErrors = true
-	}
+	}()
 
-	if !validEmailRegex.MatchString(c.Username) {
-		if c.Username == "" {
-			validationErrs.Username = "username is required"
-		} else {
-			validationErrs.Username = invalidEmailMessage
+	func() {
+		if !validEmailRegex.MatchString(c.Username) {
+			if c.Username == "" {
+				validationErrs.Username = "username is required"
+			} else {
+				validationErrs.Username = invalidEmailMessage
+			}
+			hasErrors = true
 		}
-
-		hasErrors = true
-	}
+	}()
 
 	if !hasErrors {
 		return nil
@@ -74,7 +76,7 @@ func (c *Credentials) Validate() error {
 }
 
 // CreateUser registers a new user in the db
-func (m *Model) CreateUser(db *sql.DB, credentials *Credentials) error {
+func (u *User) CreateUser(db *sql.DB, credentials *UserCredentials) error {
 	stmt, err := db.Prepare("INSERT INTO users(userID,username,password) VALUES (UUID_TO_BIN(UUID()),?,?)")
 	if err != nil {
 		return err
@@ -92,10 +94,10 @@ func (m *Model) CreateUser(db *sql.DB, credentials *Credentials) error {
 }
 
 // GetByCredentials retrieves a user from the db by username, password - for login
-func (m *Model) GetByCredentials(db *sql.DB, credentials *Credentials) (*Model, error) {
+func (u *User) GetByCredentials(db *sql.DB, credentials *UserCredentials) (*User, error) {
 	var pwdHash string
 	var userID string
-	var user Model
+	var user User
 
 	stmt, err := db.Prepare("SELECT BIN_TO_UUID(userID) userID, password FROM users WHERE username=?")
 	if err != nil {
@@ -117,8 +119,24 @@ func (m *Model) GetByCredentials(db *sql.DB, credentials *Credentials) (*Model, 
 	return &user, nil
 }
 
+// GetByUUID searches the db for a user with a given UUID
+func (u *User) GetByUUID(db *sql.DB, uuid string) (*User, error) {
+	stmt, err := db.Prepare("SELECT BIN_TO_UUID(userID) userID FROM users WHERE userID=UUID_TO_BIN(?)")
+	if err != nil {
+		return nil, err
+	}
+
+	var user *User
+	err = stmt.QueryRow(uuid).Scan(user.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	return u, nil
+}
+
 // UpdatePassword updates an action's title or description
-func (m *Model) UpdatePassword(db *sql.DB, userID string, password string) error {
+func (u *User) UpdatePassword(db *sql.DB, userID string, password string) error {
 	if invalidPasswordRegex.MatchString(password) {
 		return fmt.Errorf(invalidPasswordMessage)
 	}

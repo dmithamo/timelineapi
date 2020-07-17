@@ -1,44 +1,45 @@
-// package actions contains functionality for managing actions data
-package actions
+// package models contains functionality for managing db data
+package models
 
 import (
 	"database/sql"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/dmithamo/timelineapi/pkg/dbservice"
 )
 
 // Params defines the structure of a valid action
-type Params struct {
+type ActionParams struct {
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
 // Error allows for Params to be used a valid err type
-func (p Params) Error() string {
+func (p ActionParams) Error() string {
 	return "err in action params"
 }
 
-// Model is the interface for CRUD'ing action data in the db
-type Model struct {
+// Action is the interface for CRUD'ing action data in the db
+type Action struct {
 	ActionID string `json:"actionID,omitempty"`
-	Params
-	CreatedAt time.Time `json:"createdAt,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt,omitempty"`
+	ActionParams
+	isArchived bool
+	CreatedAt  time.Time `json:"createdAt,omitempty"`
+	UpdatedAt  time.Time `json:"updatedAt,omitempty"`
+	UserID     string    `json:"userID,omitempty"`
 }
 
 //regexes for valid input
 var validTitle = regexp.MustCompile(`^[a-zA-Z].([A-Za-z0-9_ ]){3,50}$`)
-var validDescription = regexp.MustCompile(`^[a-zA-Z].([A-Za-z0-9_ ]){3,100}$`)
+var validDescription = regexp.MustCompile(`^[a-zA-Z].([A-Za-z0-9_ \.\?,']){3,300}$`)
 
 // Validate checks the action params for errs
-func (p *Params) Validate() error {
+func (p *ActionParams) Validate() error {
 
 	hasErrors := false
-	validationErrs := &Params{}
+	validationErrs := &ActionParams{}
 
 	if !validTitle.MatchString(p.Title) {
 		if p.Title == "" {
@@ -67,13 +68,13 @@ func (p *Params) Validate() error {
 }
 
 // CreateAction adds a new action in the db
-func (m *Model) CreateAction(db *sql.DB, params Params) error {
-	stmt, err := db.Prepare("INSERT INTO actions (actionID, title, description) VALUES(?, ?, ?)")
+func (a *Action) CreateAction(db *sql.DB, params ActionParams, userID string) error {
+	stmt, err := db.Prepare("INSERT INTO actions (actionID, title, description, userID) VALUES(UUID_TO_BIN(UUID()), ?, ?, UUID_TO_BIN(?))")
 	if err != nil {
 		return err
 	}
 
-	_, err = stmt.Exec(makeSlugHelper(params.Title), params.Title, params.Description)
+	_, err = stmt.Exec(params.Title, params.Description, userID)
 	if err != nil {
 		return dbservice.CheckDatabaseErr(err, "title")
 	}
@@ -82,8 +83,8 @@ func (m *Model) CreateAction(db *sql.DB, params Params) error {
 }
 
 // GetActions retrieves all actions in the db
-func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
-	stmt, err := db.Prepare("SELECT * FROM actions")
+func (a *Action) GetActions(db *sql.DB) ([]Action, error) {
+	stmt, err := db.Prepare("SELECT BIN_TO_UUID(actionID)actionID,title,description,isArchived,createdAt,updatedAt,BIN_TO_UUID(userID)userID FROM actions")
 	if err != nil {
 		return nil, dbservice.CheckDatabaseErr(err)
 	}
@@ -94,15 +95,27 @@ func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
 		return nil, err
 	}
 
-	var actions []Model
+	var actions []Action
 	for rows.Next() {
-		var action Model
+		var action Action
 
-		err := rows.Scan(&action.ActionID, &action.Title, &action.Description, &action.CreatedAt, &action.UpdatedAt)
+		err := rows.Scan(
+			&action.ActionID,
+			&action.Title,
+			&action.Description,
+			&action.isArchived,
+			&action.CreatedAt,
+			&action.UpdatedAt,
+			&action.UserID,
+		)
+
 		if err != nil {
 			return nil, err
 		}
-		actions = append(actions, action)
+		// ignore archived actions
+		if !action.isArchived {
+			actions = append(actions, action)
+		}
 	}
 
 	err = rows.Err()
@@ -114,23 +127,39 @@ func (m *Model) GetActions(db *sql.DB) ([]Model, error) {
 }
 
 // GetActionByID retrueves a single action by its actionID
-func (m *Model) GetActionByID(db *sql.DB, actionID string) (*Model, error) {
-	stmt, err := db.Prepare(fmt.Sprintf("SELECT * FROM actions WHERE actionID='%v'", actionID))
+func (a *Action) GetActionByID(db *sql.DB, actionID string) (*Action, error) {
+	stmt, err := db.Prepare(fmt.Sprintf("SELECT BIN_TO_UUID(actionID)actionID,title,description,isArchived,createdAt,updatedAt,BIN_TO_UUID(userID)userID FROM actions WHERE actionID=UUID_TO_BIN('%v')", actionID))
+
 	if err != nil {
 		return nil, err
 	}
 
-	action := Model{}
-	err = stmt.QueryRow().Scan(&action.ActionID, &action.Title, &action.Description, &action.CreatedAt, &action.UpdatedAt)
+	action := Action{}
+	err = stmt.QueryRow().Scan(
+		&action.ActionID,
+		&action.Title,
+		&action.Description,
+		&action.isArchived,
+		&action.CreatedAt,
+		&action.UpdatedAt,
+		&action.UserID,
+	)
+
 	if err != nil {
+		fmt.Println("ERROR", err)
+
 		return nil, err
+	}
+
+	if action.isArchived {
+		return nil, sql.ErrNoRows
 	}
 
 	return &action, nil
 }
 
 // UpdateAction updates an action's title or description
-func (m *Model) UpdateAction(db *sql.DB, actionID string, params Params) error {
+func (a *Action) UpdateAction(db *sql.DB, actionID string, params ActionParams) error {
 	updateCommand := ""
 	switch {
 	case params.Title != "" && params.Description != "":
@@ -158,9 +187,4 @@ func (m *Model) UpdateAction(db *sql.DB, actionID string, params Params) error {
 	}
 
 	return nil
-}
-
-// makeSlugHelper prepares a slug given the title
-func makeSlugHelper(title string) string {
-	return strings.ToLower(strings.Join(strings.Split(title, " "), "-"))
 }
