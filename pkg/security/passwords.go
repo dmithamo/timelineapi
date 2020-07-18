@@ -4,7 +4,7 @@ package security
 import "golang.org/x/crypto/bcrypt"
 
 // pwdHashingStrength sets the level of rigour employed in hashing the pwd
-const pwdHashingStrength = 12
+const pwdHashingStrength = 11
 
 // GeneratePasswordHash encrypts a pwd for storage in the db
 func GeneratePasswordHash(password *string) (string, error) {

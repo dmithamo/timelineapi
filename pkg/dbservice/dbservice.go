@@ -31,8 +31,8 @@ func ConnectDB(dsn *string) (*sql.DB, error) {
 
 // CreateTables creates all tables in the db
 func CreateTables(db *sql.DB) error {
-	for tableName, schema := range schemas {
-		stmt, err := db.Prepare(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v %v", tableName, schema))
+	createTableHelper := func(tableName string) error {
+		stmt, err := db.Prepare(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v %v", tableName, schemas[tableName]))
 		if err != nil {
 			return err
 		}
@@ -42,7 +42,25 @@ func CreateTables(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+		return nil
 	}
+
+	// createTables in order - because references
+	err := createTableHelper("users")
+	if err != nil {
+		return err
+	}
+
+	err = createTableHelper("actions")
+	if err != nil {
+		return err
+	}
+
+	err = createTableHelper("outputs")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -10,17 +10,25 @@ import (
 
 // CheckDatabaseErr returns `better` err messages for db errors
 func CheckDatabaseErr(err error, uniqueColum ...string) error {
-	// verify that err is driver specific err
-	driverErr, isDriverErr := err.(*mysql.MySQLError)
-	switch {
-	case !isDriverErr:
-		return err
-
-	// check which field reported a duplication err, if err is duplication err
-	case driverErr.Number == mysqlerr.ER_DUP_ENTRY:
-		return fmt.Errorf("%v is already in use", strings.Join(uniqueColum, ", "))
-
-	default:
+	if err == nil {
 		return nil
 	}
+
+	// db driver errs that we are currently checking
+	driverErrs := map[uint16]error{
+		mysqlerr.ER_DUP_ENTRY: fmt.Errorf("%v is already in use", strings.Join(uniqueColum, ", ")),
+	}
+
+	// verify that err is driver specific err
+	driverErr, isDriverErr := err.(*mysql.MySQLError)
+	if !isDriverErr {
+		return err
+	}
+
+	formattedErr, exists := driverErrs[driverErr.Number]
+	if !exists {
+		return err
+	}
+
+	return formattedErr
 }
